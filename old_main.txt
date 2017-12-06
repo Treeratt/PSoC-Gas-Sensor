@@ -1,0 +1,249 @@
+/* ========================================
+ *
+ * Copyright YOUR COMPANY, THE YEAR
+ * All Rights Reserved
+ * UNPUBLISHED, LICENSED SOFTWARE.
+ *
+ * CONFIDENTIAL AND PROPRIETARY INFORMATION
+ * WHICH IS THE PROPERTY OF your company.
+ *
+ * ========================================
+*/
+#include "project.h"
+#include "MQ_2.h"
+#include "MQ_7.h"
+#include "MQ_135.h"
+#include "MQ_131.h"
+#include "AirQuality.h"
+#include "stdio.h"
+#include "DHT11.h"
+#include "usb_protocols.h"
+#include "globals.h"
+#include "math.h"
+
+
+uint8 usb_data = 0;
+uint8 count = 0;
+char LCD_str[40];
+uint16 R0_s[nuber_sensors];
+
+//void AirQualityairqualitysensor;
+int current_quality = -1;
+
+extern uint8 temperature;
+extern uint8 humidity;
+extern uint8 DHT_bytes[5];
+
+CY_ISR_PROTO(DMA_Done);
+
+SensorData all_data;
+int i;
+
+typedef struct {
+    float32 b;
+    float32 m;
+} curve_params;
+
+curve_params MQ135_params = { 105.827207218, -2.85388127854 };
+
+uint16 read_air_sensor(uint8 sensor_channel);
+uint16 get_R(uint8 sensor_channel);
+float32 get_ppm(uint16 sensor_channel, uint16 R0, curve_params sensor);
+float32 ppm;
+
+int main(void)
+ {
+    int16_t get_pollution_level[nuber_sensors]; 
+    CyGlobalIntEnable;
+    
+   // USBFS_Start(0, USBFS_DWR_VDDD_OPERATION);  // initialize the USB
+   // while(!USBFS_bGetConfiguration());  //Wait till it the usb gets its configuration from the PC
+    USBFS_EnableOutEP(OUT_ENDPOINT);
+
+    dma_config();
+    LCD_Start();
+    LCD_ClearDisplay();
+    ADC_Start();
+    AMux_Start();
+    //ADC_StartConvert();
+   // RTC_Start();
+    
+    isr_DHT_DONE_StartEx(DMA_Done);
+    CyDelay(1000);
+    uint16 R0_MQ135 = 0.25*get_R(0);
+   // uint16 R0_MQ7 = 0.
+    
+    //LCD_Position(1,0);
+   // sprintf(LCD_str, "r:%d|%d ",V_MQ135_initial,get_pollution_level[0]);
+    //LCD_Position(1,0);
+   // sprintf(LCD_str, "r:%d|%d ",V_MQ7_initial,get_pollution_level[2]);
+   // LCD_PrintString(LCD_str);
+//    CyDelay(5000);
+    LCD_ClearDisplay();
+    for(;;)
+    {
+        
+        //ADC_StopConvert();
+//        LCD_Position(0,0);
+//        LCD_PrintNumber(RTC_ReadDayOfMonth());
+//        LCD_Position(1,9);
+//        LCD_PrintString("s:");
+//        LCD_PrintNumber(RTC_ReadSecond());
+//        LCD_Position(1,5);
+//        LCD_PrintString("m:");
+//        LCD_PrintNumber(RTC_ReadMinute());
+//        LCD_Position(1,0);
+//        LCD_PrintString("h:");
+//        LCD_PrintNumber(RTC_ReadHour());
+        
+        
+//        get_pollution_level[0] = read_air_sensor(0);
+//        uint16 V_MQ135 = ADC_CountsTo_mVolts(get_pollution_level[0]);
+//        uint16 Rs= ((5000.00/V_MQ135) *1000.00) - 1000.00;
+//        float32 ratio = (float32) R0/ (float32) Rs;
+//        float32 log_ratio = log(ratio);
+//        float32 ppm = pow(10, (log_ratio - 4.6)/(-2.3));
+//        LCD_Position(0,0);
+//        sprintf(LCD_str, "MQ135 :%3.0f ppm", ppm);
+//        LCD_PrintString(LCD_str);
+//        LCD_Position(1,0);
+//        sprintf(LCD_str, "r:%1.4f|%d ",ratio,Rs);
+//        LCD_PrintString(LCD_str);
+////        ADC_StopConvert();
+        
+        get_pollution_level[0] = read_air_sensor(0);
+        uint16 V_MQ135 = ADC_CountsTo_mVolts(get_pollution_level[0]);
+        uint16 Rs= (5000.00/V_MQ135) *1000.00 - 1000.00;
+        float32 ratio =  (float32) Rs / (float32) R0_MQ135;
+        float32 log_ratio = log(ratio);
+        float32 ppm = get_ppm(0, MQ135_params);
+        //float32 ppm = MQ135_params.b*(pow(log_ratio,MQ135_params.m));
+        LCD_Position(0,0);
+        sprintf(LCD_str, "MQ135 :%3.0f ppm", ppm);
+        LCD_PrintString(LCD_str);
+        LCD_Position(1,0);
+        sprintf(LCD_str, "r:%1.4f|%d ",log_ratio,Rs);
+        LCD_PrintString(LCD_str);
+        
+        
+//        get_pollution_level[1] = read_air_sensor(1);
+//        uint16 V_AirQuality = ADC_CountsTo_mVolts(get_pollution_level[1]);
+//        uint16 Rs1= (5000.00/V_AirQuality) *1000.00 - 1000.00;
+//        float32 ratio1 = (float32) R0/ (float32) Rs1;
+//        float32 log_ratio1 = log(ratio1);
+//        float32 ppm1 = pow(10, (log_ratio1 - 0.64)/(0.8));
+//        LCD_Position(0,0);
+//        sprintf(LCD_str, "Air :%3.0f ppm", ppm1);
+//        LCD_PrintString(LCD_str);
+//        LCD_Position(1,0);
+//        sprintf(LCD_str, "r:%f|%d ",ratio1, R0);
+//        LCD_PrintString(LCD_str);
+//        ADC_StopConvert();      
+        
+        get_pollution_level[2] = read_air_sensor(2);
+        uint16 V_MQ7 = ADC_CountsTo_mVolts(get_pollution_level[2]);
+        uint16 Rs2= (5000.00/V_MQ7) *1000.00 - 1000.00;
+       // float32 ratio2 = (float32) R0/ (float32) Rs2;
+     //   float32 log_ratio2 = log(ratio2);
+     //  float32 ppm2 = pow(10, ((log_ratio2) - 12.2)/(-4));
+//        LCD_Position(0,0);
+//        sprintf(LCD_str, "MQ7: %3.0f ppm", ppm2);
+//        LCD_PrintString(LCD_str);
+//        LCD_Position(1,0);
+//        sprintf(LCD_str, "r:%f|%d ",ratio2, R0);
+//        LCD_PrintString(LCD_str);        
+////        ADC_StopConvert();  
+        
+        get_pollution_level[3] = read_air_sensor(3);
+        uint16 V_MQ2 = ADC_CountsTo_mVolts(get_pollution_level[3]);
+        uint16 Rs3= (5000.00/V_MQ2) *1000.00 - 1000.00;
+        //float32 ratio3 = (float32) R0/ (float32) Rs3;
+      //  float32 log_ratio3 = log(ratio3);
+      //  float32 ppm3 = pow(10, ((log_ratio3 - (10))/(-0.488)));
+//        LCD_Position(0,0);
+//        sprintf(LCD_str, "MQ2 :%3.0f ppm", ppm3);
+//        LCD_PrintString(LCD_str);
+//        LCD_Position(1,0);
+//        sprintf(LCD_str, "r:%f|%d ",ratio3, Rs3);
+//        LCD_PrintString(LCD_str);
+////      
+       // ADC_StopConvert();  
+        
+        //CyDelay(2000);
+        //LCD_ClearDisplay();
+       // ADC_StopConvert();
+        
+        get_pollution_level[4] = read_air_sensor(4);
+        uint16 V_MQ131 = ADC_CountsTo_mVolts(get_pollution_level[4]);
+        uint16 Rs4= (5000.00/V_MQ131) *1000.00 - 1000.00;
+      //  float32 ratio4 = (float32) R0/ (float32) Rs4;
+      //  float32 log_ratio4 = log(ratio4);
+      //  float32 ppm4 = pow(10, (log_ratio4 - (14))/(14));
+//        LCD_Position(0,0);
+//        sprintf(LCD_str, "MQ131:%3.0f ppm", ppm4);
+//        LCD_PrintString(LCD_str);
+//        LCD_Position(1,0);
+//        sprintf(LCD_str, "r:%f|%d ",ratio4, R0);
+//        LCD_PrintString(LCD_str);
+//        //ADC_StopConvert(); 
+        
+        all_data.MQ_135 = get_pollution_level[0];
+        all_data.AirQuality = get_pollution_level[1];
+        all_data.MQ_7 = get_pollution_level[2];
+        all_data.MQ_2 = get_pollution_level[3];
+        all_data.MQ_131 = get_pollution_level[4];
+        
+        DHTread();
+        CyDelay(200);
+        all_data.humidity  = DHT_bytes[0];  
+        all_data.temperture = DHT_bytes[2];
+        //LCD_Position(1,1);
+        //sprintf(LCD_str, "t,h:%i|%i ", all_data.temperture,all_data.humidity);
+        //LCD_PrintString(LCD_str);
+        
+//        if (ppm > 10)
+//        {
+//         LED_Write(1);
+//        }
+//        else
+//        {
+//            LED_Write(0);
+//        }
+        
+       // USB_Export_Data(all_data, 12);
+        usb_data++;
+        count++;
+        CyDelay(2000);
+      //  LCD_ClearDisplay();
+        }      
+    }
+
+uint16 read_air_sensor(uint8 sensor_channel) {
+    AMux_Select(sensor_channel);
+    CyDelay(100);
+    ADC_StartConvert();
+    ADC_IsEndConversion(ADC_WAIT_FOR_RESULT);  
+    return ADC_GetResult16();
+}
+
+uint16 get_R(uint8 sensor_channel) {
+    uint16 adc_counts = read_air_sensor(sensor_channel);
+    uint16 voltage = ADC_CountsTo_mVolts(adc_counts);  // USE TO CALCULATE R0 = 5V/Vm * Rl - Rl
+    return ((5000.00/voltage) *1000.00 - 1000.00);
+   
+}
+float32 get_ppm(uint16 sensor_channel, uint R0, curve_params sensor){
+        float32 ratio = (float32) get_R(sensor_channel) / (float32) Rs(sensor_channel);
+        float32 log_ratio = log(ratio);
+        float32 ppm = sensor.b*(pow(log_ratio,sensor.m));
+}
+        
+
+get_pollution_level[0] = read_air_sensor(0);
+        uint16 V_MQ135 = ADC_CountsTo_mVolts(get_pollution_level[0]);
+        uint16 Rs= (5000.00/V_MQ135) *1000.00 - 1000.00;
+        float32 ratio =  (float32) Rs / (float32) R0_MQ135;
+        float32 log_ratio = log(ratio);
+        float32 ppm = get_ppm(0, MQ135_params);
+
+
